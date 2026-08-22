@@ -229,11 +229,6 @@ async def handle_pf_audio(message: Message, state: FSMContext, bot: Bot):
     )
 
 
-@router.message(PersonalFlowSetup.waiting_audio)
-async def handle_pf_audio_wrong_type(message: Message):
-    await message.answer("لطفاً یه فایل صوتی (voice یا audio) بفرست.")
-
-
 @router.message(PersonalFlowSetup.waiting_lyrics, F.text)
 async def handle_pf_lyrics_text(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -318,6 +313,11 @@ async def handle_audio_generic(message: Message, state: FSMContext, bot: Bot):
 
     # در غیر این صورت، این فایل صوتی برای فلوی شخصیه
     await handle_pf_audio(message, state, bot)
+
+
+@router.message(PersonalFlowSetup.waiting_audio)
+async def handle_pf_audio_wrong_type(message: Message):
+    await message.answer("لطفاً یه فایل صوتی (voice یا audio) بفرست.")
 
 
 # ---------- انتخاب حس‌وحال + کلمات تمرکز + پیش‌نمایش + آهنگ کامل ----------
