@@ -33,18 +33,23 @@ CRITIC_SYSTEM_PROMPT = """تو یک منتقد سرسخت و متخصص رپ ف�
 
 
 async def _call_gemini(system_prompt: str, user_prompt: str) -> str:
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}"
-    )
+    # نکته: کلیدهای جدید Gemini (Auth keys, که با AQ. شروع می‌شن) باید توی هدر
+    # x-goog-api-key فرستاده بشن، نه به‌صورت query param. کلیدهای قدیمی‌تر
+    # (AIza...) هم با این روش هدر کار می‌کنن، پس این روش امن‌تره.
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent"
+    headers = {
+        "x-goog-api-key": config.GEMINI_API_KEY,
+        "Content-Type": "application/json",
+    }
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
         "generationConfig": {"temperature": 1.0, "maxOutputTokens": 1200},
     }
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
+        resp = await client.post(url, headers=headers, json=payload)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
         data = resp.json()
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -142,3 +147,4 @@ def build_personal_flow_prompt(profile_summary: str, topic: str) -> str:
 
 مهم: باید طوری بنویسی که انگار خود کاربر نوشته - همون الگوی قافیه‌بندی، طول خط،
 و لحن احساسی رو حفظ کن."""
+    
