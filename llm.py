@@ -3,6 +3,9 @@
 لایه‌ی یکپارچه برای صدا زدن مدل زبانی. با تغییر LLM_PROVIDER در .env
 می‌تونی بین Gemini / OpenAI / Claude سوییچ کنی بدون تغییر بقیه‌ی کد.
 """
+import asyncio
+import re
+
 import httpx
 import config
 
@@ -100,14 +103,35 @@ async def _call_claude(system_prompt: str, user_prompt: str) -> str:
     return "".join(b.get("text", "") for b in data.get("content", [])).strip()
 
 
-async def _call_provider(system_prompt: str, user_prompt: str) -> str:
-    if config.LLM_PROVIDER == "gemini":
-        return await _call_gemini(system_prompt, user_prompt)
-    if config.LLM_PROVIDER == "openai":
-        return await _call_openai(system_prompt, user_prompt)
-    if config.LLM_PROVIDER == "claude":
-        return await _call_claude(system_prompt, user_prompt)
-    raise ValueError(f"LLM_PROVIDER نامعتبر: {config.LLM_PROVIDER}")
+def _extract_retry_seconds(error_text: str) -> float:
+    """از متن خطای 429 عدد ثانیه‌ی پیشنهادی گوگل برای صبر کردن رو استخراج می‌کنه."""
+    match = re.search(r"retry in ([\d.]+)s", error_text)
+    if match:
+        return float(match.group(1))
+    return 15.0  # مقدار پیش‌فرض اگه گوگل عددی نداده باشه
+
+
+async def _call_provider(system_prompt: str, user_prompt: str, max_retries: int = 2) -> str:
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            if config.LLM_PROVIDER == "gemini":
+                return await _call_gemini(system_prompt, user_prompt)
+            if config.LLM_PROVIDER == "openai":
+                return await _call_openai(system_prompt, user_prompt)
+            if config.LLM_PROVIDER == "claude":
+                return await _call_claude(system_prompt, user_prompt)
+            raise ValueError(f"LLM_PROVIDER نامعتبر: {config.LLM_PROVIDER}")
+        except RuntimeError as e:
+            error_text = str(e)
+            is_rate_limit = "429" in error_text or "RESOURCE_EXHAUSTED" in error_text
+            if is_rate_limit and attempt < max_retries:
+                wait_seconds = min(_extract_retry_seconds(error_text) + 2, 60)
+                await asyncio.sleep(wait_seconds)
+                last_error = e
+                continue
+            raise
+    raise last_error
 
 
 async def generate_text(user_prompt: str, extra_system: str = "") -> str:
