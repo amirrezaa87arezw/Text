@@ -12,6 +12,7 @@ import re
 import subprocess
 
 import httpx
+import imageio_ffmpeg
 import config
 
 
@@ -51,9 +52,14 @@ async def synthesize_speech(text: str) -> bytes:
 
 
 def convert_mp3_to_ogg(mp3_path: str, ogg_path: str) -> None:
-    """تبدیل mp3 به ogg/opus برای فرستادن به‌عنوان voice message تلگرام."""
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", mp3_path, "-c:a", "libopus", "-b:a", "48k", ogg_path],
-        check=True,
+    """تبدیل mp3 به ogg/opus برای فرستادن به‌عنوان voice message تلگرام.
+    از باینری ffmpeg همراه پکیج imageio-ffmpeg استفاده می‌کنه، نه ffmpeg
+    نصب‌شده روی سیستم عامل - چون روی بعضی هاست‌ها (مثل Railway) پیدا نمیشه."""
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    result = subprocess.run(
+        [ffmpeg_exe, "-y", "-i", mp3_path, "-c:a", "libopus", "-b:a", "48k", ogg_path],
         capture_output=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"خطای ffmpeg در تبدیل ویس: {result.stderr.decode(errors='ignore')[:300]}")
+        
